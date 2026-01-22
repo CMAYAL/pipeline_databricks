@@ -36,7 +36,7 @@ connection_properties = {
 
 # COMMAND ----------
 
-table = "dbo.transacciones"
+table_name = "dbo.transacciones"
 df_sql = spark.read \
     .jdbc(url=jdbc_url, table=table_name, properties=connection_properties)
 display(df_sql.limit(10))
