@@ -19,7 +19,7 @@ display(df_silver)
 # 
 # en el proceso anterior se almaceno directamente en el catalogo paralectura directa
 display(spark.sql("SELECT * FROM silver.silver_transacciones LIMIT 10"))
-$0en el proceso anterior se almaceno directamente en el catalogo paralectura directa
+# en el proceso anterior se almaceno directamente en el catalogo paralectura directa
 display(spark.sql("SELECT * FROM silver.silver_transacciones LIMIT 10"))
 
 # COMMAND ----------
@@ -29,7 +29,8 @@ spark.sql("CREATE SCHEMA IF NOT EXISTS gold")
 
 # COMMAND ----------
 
-from pyspark.sql.functions import col, year, month, dayofmonth, monotonically_increasing_id, format_string
+# DBTITLE 1,Cell 6
+from pyspark.sql.functions import col, year, month, dayofmonth, monotonically_increasing_id, format_string, date_format
 
 # --- DIMENSIÓN CANAL ---
 # Extraemos los valores únicos de canal tabla Silver
@@ -44,17 +45,20 @@ dim_fecha = df_fechas.select(
     col("fecha"),
     year("fecha").alias("anio"),
     month("fecha").alias("mes"),
+    # Línea añadida: 'MMMM' devuelve el nombre completo del mes
+    date_format(col("fecha"), "MMMM").alias("nombre_mes"),
     dayofmonth("fecha").alias("dia")
 ).orderBy("sk_fecha")
 
 # Guardar dimensiones en Gold
 dim_canal.write.format("delta").mode("overwrite").saveAsTable("gold.dim_canal")
-dim_fecha.write.format("delta").mode("overwrite").saveAsTable("gold.dim_fecha")
+dim_fecha.write.format("delta").mode("overwrite").option("overwriteSchema", "true").saveAsTable("gold.dim_fecha")
 display(dim_canal)
 display(dim_fecha)
 
 # COMMAND ----------
 
+# DBTITLE 1,Cell 7
 from pyspark.sql.functions import count, sum, avg, min, max
 
 # 1. creamos nuestra tabla de hechos a partir de las transacciones en la capa Silver y unimos con dimensiones para obtener los SK
@@ -64,7 +68,7 @@ df_maestra = df_silver.join(dim_canal, "canal") \
                       .join(dim_fecha, "fecha")
 
 # 2. Generar Agregaciones Analíticas
-fact_transacciones = df_maestra.groupBy("sk_canal", "sk_fecha", "tipo_operacion", "anio", "mes") \
+fact_transacciones = df_maestra.groupBy("sk_canal", "sk_fecha", "id_usuario", "tipo_operacion", "anio", "mes") \
     .agg(
         count("id_trx").alias("cantidad"),
         sum("monto").alias("sum_monto"),
@@ -78,7 +82,7 @@ path_gold_fact = "abfss://gold@aprovidatalake.dfs.core.windows.net/fact_transacc
 
 fact_transacciones.write \
     .format("delta") \
-    .mode("overwrite") \
+    .mode("overwrite").option("overwriteSchema", "true") \
     .option("path", path_gold_fact) \
     .saveAsTable("gold.fact_transacciones")
 
